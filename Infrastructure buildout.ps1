@@ -1,7 +1,7 @@
-Install-Module -Name AWS.Tools.Common
-Install-Module -Name AWS.Tools.Installer
-Install-AWSToolsModule EC2
-
+Install-Module -Name AWS.Tools.Common -confirm:$False
+Install-Module -Name AWS.Tools.Installer -confirm:$False
+Install-AWSToolsModule EC2 -confirm:$False
+Install-AWSToolsModule SimpleSystemsManagement -confirm:$False
 
 #Create a VPC
 
@@ -58,4 +58,7 @@ New-EC2Route -RouteTableId $RouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayI
     aws ec2 create-route --route-table-id rtb-c1c8faa6 --destination-cidr-block 0.0.0.0/0 --gateway-id igw-1ff7a07b
     #>
 
+
+$LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
+New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PublicSubnetID
 
