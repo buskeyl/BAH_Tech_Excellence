@@ -44,7 +44,7 @@ Add-EC2InternetGateway -VpcId $VPCID -InternetGatewayId $INternetGateway
 # Create a custom route table for your VPC.
 
 $RouteTable = $(New-EC2RouteTable -VpcId $VPCID).RouteTableId 
-New-EC2Tag -Resource $RouteTable -Tag @{Key="Name"; Value="BAH_Team1"}
+New-EC2Tag -Resource $RouteTable -Tag @{Key="Name"; Value="BAH_Public_Routes"}
 
     <#
     aws ec2 create-route-table --vpc-id vpc-2f09a348
@@ -59,6 +59,43 @@ New-EC2Route -RouteTableId $RouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayI
     #>
 
 
+# Associate route table to subnet
+ Register-EC2RouteTable -RouteTableId $RouteTable -SubnetId $PublicSubnetID 
+
+
+
+# Create the AWS web server Instances 
 $LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
-New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PublicSubnetID
+$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PublicSubnetID).ReservationId
+$instance = aws ec2 describe-instances --filters Name=reservation-id,Values="$instance" | Select-String instanceid
+$instance = $($instance -split ":")[1]
+$instance = $instance.Replace("`"","")
+$instance = $instance.Replace(",","")
+$instance = $instance.trim()
+$instance_id=$instance
+New-EC2Tag -Resource $instance_id -Tag @{Key="Name"; Value="Webserver"}
+
+# Create the AWS Jumpbox Instance 
+$LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
+$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PrivateSubnetID).ReservationId
+$instance = aws ec2 describe-instances --filters Name=reservation-id,Values="$instance" | Select-String instanceid
+$instance = $($instance -split ":")[1]
+$instance = $instance.Replace("`"","")
+$instance = $instance.Replace(",","")
+$instance = $instance.trim()
+$instance_id=$instance
+New-EC2Tag -Resource $instance_id -Tag @{Key="Name"; Value="Jumpbox"}
+
+# Create the AWS Jenkins Instance 
+$LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
+$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PrivateSubnetID).ReservationId
+$instance = aws ec2 describe-instances --filters Name=reservation-id,Values="$instance" | Select-String instanceid
+$instance = $($instance -split ":")[1]
+$instance = $instance.Replace("`"","")
+$instance = $instance.Replace(",","")
+$instance = $instance.trim()
+$instance_id=$instance
+New-EC2Tag -Resource $instance_id -Tag @{Key="Name"; Value="Jenkins"}
+
+
 
