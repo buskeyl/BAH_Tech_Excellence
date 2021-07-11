@@ -1,4 +1,4 @@
-
+#!/bin/bash
 
 # Update your Instance
 sudo yum update -y
@@ -22,7 +22,10 @@ sudo usermod -a -G apache ec2-user
 sudo chown -R ec2-user:apache /var/www
 
 # To add group write permissions and to set the group ID on future subdirectories, change the directory permissions of /var/www and its subdirectories.
-sudo chmod 2775 /var/www && find /var/www -type d -exec sudo chmod 2775 {} \;
+sudo chmod 2775 /var/www 
+find /var/www -type d -exec sudo chmod 2775 {} \;
+clear
 
 # To add group write permissions, recursively change the file permissions of /var/www and its subdirectories:
 find /var/www -type f -exec sudo chmod 0664 {} \;
+
