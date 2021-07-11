@@ -30,13 +30,14 @@ New-EC2Tag -Resource $PrivateSubnetID -Tag @{Key="Name"; Value="Private Subnet"}
 # Create Internet Gateway 
 $INternetGateway = $(New-EC2InternetGateway).InternetGatewayId
 New-EC2Tag -Resource $INternetGateway -Tag @{Key="Name"; Value="BAH_Team1"}
+
     <#
     aws ec2 create-internet-gateway 
     #>
 
-
 # Attach the internet gateway to your VPC.
 Add-EC2InternetGateway -VpcId $VPCID -InternetGatewayId $INternetGateway
+
     <#
     aws ec2 attach-internet-gateway --vpc-id vpc-2f09a348 --internet-gateway-id igw-1ff7a07b
     #>
@@ -86,7 +87,6 @@ $ip3.IpRanges.Add("0.0.0.0/0")
 Grant-EC2SecurityGroupIngress -GroupId $WebserverSGID -IpPermissions @( $ip1, $ip2,$ip3 )
 New-EC2Tag -Resource $WebserverSGID -Tag @{Key="Name"; Value="Webserver Firewall"}
 
-
 $PrivateSubnetSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Private_Security_Group" -GroupDescription "Private Subnet Firewall" 
 
 $ip1 = new-object Amazon.EC2.Model.IpPermission 
@@ -98,8 +98,7 @@ Grant-EC2SecurityGroupIngress -GroupId $PrivateSubnetSGID -IpPermissions @( $ip1
 New-EC2Tag -Resource $PrivateSubnetSGID  -Tag @{Key="Name"; Value="Private Subnet Firewall"}
 
 
-
- # Configure UserData
+ # Configure Instance UserData
 
  $script = Get-Content -raw C:\_scripts\BAH_Tech_Excellence\Userdata.sh
  $WebServerUserData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Script))
@@ -153,13 +152,9 @@ $ElasticIP = New-EC2Address -TagSpecification $TagSpecification
 Register-EC2Address -InstanceId $WebserverInstanceID -AllocationId $ElasticIP.AllocationId
 
 
-
-
 # Creaste a new Key Pair
-
 # Create Billing alerts
 # Create AutoScaling policy
-
 # Create Elastic Loadbalancer
 
 
