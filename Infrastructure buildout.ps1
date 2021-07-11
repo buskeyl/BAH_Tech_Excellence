@@ -62,6 +62,7 @@ New-EC2Route -RouteTableId $RouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayI
 # Associate route table to subnet
  Register-EC2RouteTable -RouteTableId $RouteTable -SubnetId $PublicSubnetID 
 
+ # Confiure UserData
 
 
 # Create the AWS web server Instances 
@@ -96,6 +97,24 @@ $instance = $instance.Replace(",","")
 $instance = $instance.trim()
 $instance_id=$instance
 New-EC2Tag -Resource $instance_id -Tag @{Key="Name"; Value="Jenkins"}
+
+# Create Elastic IP and connect to the Web server Instance
+# Allocate, Associate to VPC, assign to instance.
+
+
+# Configure Security Groups
+    # Allow 80 & 443 from 0.0.0.0
+    # Allow SSH from Private Subnet
+
+# Creaste a new Key Pair
+
+# Create Billing alerts
+
+# Create AutoScaling policy
+
+# Create Elastic Loadbalancer
+
+
 
 
 
