@@ -5,6 +5,7 @@ Install-AWSToolsModule SimpleSystemsManagement -confirm:$False
 
 #Create a VPC
 
+Write-Output "Creating VPC"
 $VPCID = $(New-EC2VPC -cidrblock 10.0.0.0/16).VpcId 
 New-EC2Tag -Resource $VPCID -Tag @{Key="Name"; Value="BAH_Team1"}
 
@@ -13,7 +14,7 @@ New-EC2Tag -Resource $VPCID -Tag @{Key="Name"; Value="BAH_Team1"}
     #>
 
 # Create the Subnets 
-
+Write-Output "Creating Subnets"
 # create a subnet with a 10.0.20.0/24 CIDR block.
 $PublicSubnetID = $(New-EC2Subnet -VpcId $VPCID -CidrBlock 10.0.10.0/24).SubnetId
 New-EC2Tag -Resource $PublicSubnetID -Tag @{Key="Name"; Value="Public Subnet"}
@@ -27,15 +28,19 @@ New-EC2Tag -Resource $PrivateSubnetID -Tag @{Key="Name"; Value="Private Subnet"}
     aws ec2 create-subnet --vpc-id vpc-2f09a348 --cidr-block 10.0.0.0/24
     #>
 
+
 # Create Internet Gateway 
+Write-Output "Creating Internet Gateway"
 $INternetGateway = $(New-EC2InternetGateway).InternetGatewayId
 New-EC2Tag -Resource $INternetGateway -Tag @{Key="Name"; Value="BAH_Team1"}
+
 
     <#
     aws ec2 create-internet-gateway 
     #>
 
 # Attach the internet gateway to your VPC.
+Write-Output "Attaching Internet Gateway to Public Subnet"
 Add-EC2InternetGateway -VpcId $VPCID -InternetGatewayId $INternetGateway
 
     <#
@@ -43,7 +48,7 @@ Add-EC2InternetGateway -VpcId $VPCID -InternetGatewayId $INternetGateway
     #>
 
 # Create a custom route table for your VPC.
-
+Write-Output "Creating Route Table"
 $RouteTable = $(New-EC2RouteTable -VpcId $VPCID).RouteTableId 
 New-EC2Tag -Resource $RouteTable -Tag @{Key="Name"; Value="BAH_Public_Routes"}
 
@@ -52,7 +57,7 @@ New-EC2Tag -Resource $RouteTable -Tag @{Key="Name"; Value="BAH_Public_Routes"}
     #>
 
 # Create a route in the route table that points all traffic (0.0.0.0/0) to the Internet gateway.
-
+Write-Output "Creating routes in route table"
 New-EC2Route -RouteTableId $RouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayId $INternetGateway
 
     <#
@@ -61,32 +66,46 @@ New-EC2Route -RouteTableId $RouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayI
 
 
 # Associate route table to subnet
+Write-Output "Associating the route to the subnets"
  Register-EC2RouteTable -RouteTableId $RouteTable -SubnetId $PublicSubnetID 
 
 
 # Create and configure Security Groups 
+Write-Output "Creating Security Groups"
 
-$WebserverSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Public_Security_Group" -GroupDescription "Public Subnet Firewall" 
+Write-Output "Creating Webserver Security Group"
+$WebserverSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Public_Security_Group" -GroupDescription "Webserver Firewall" 
+
+$ip1 = new-object Amazon.EC2.Model.IpPermission 
+$ip1.IpProtocol = "tcp" 
+$ip1.FromPort = 80
+$ip1.ToPort = 80 
+$ip1.IpRanges.Add("10.0.20.0/24") 
+$ip2 = new-object Amazon.EC2.Model.IpPermission 
+$ip2.IpProtocol = "tcp" 
+$ip2.FromPort = 443
+$ip2.ToPort = 443
+$ip2.IpRanges.Add("0.0.0.0/0") 
+
+
+Grant-EC2SecurityGroupIngress -GroupId $WebserverSGID -IpPermissions @( $ip1, $ip2 )
+New-EC2Tag -Resource $WebserverSGID -Tag @{Key="Name"; Value="Webserver Firewall"}
+
+
+Write-Output "Creating Jumpbox Security Group"
+
+$JumpBoxSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Jumpbox_Security_Group" -GroupDescription "Jumpbox Firewall" 
 
 $ip1 = new-object Amazon.EC2.Model.IpPermission 
 $ip1.IpProtocol = "tcp" 
 $ip1.FromPort = 22 
 $ip1.ToPort = 22 
-$ip1.IpRanges.Add("10.0.20.0/24") 
-$ip2 = new-object Amazon.EC2.Model.IpPermission 
-$ip2.IpProtocol = "tcp" 
-$ip2.FromPort = 80 
-$ip2.ToPort = 80
-$ip2.IpRanges.Add("0.0.0.0/0") 
-$ip3 = new-object Amazon.EC2.Model.IpPermission 
-$ip3.IpProtocol = "tcp" 
-$ip3.FromPort = 443 
-$ip3.ToPort = 443
-$ip3.IpRanges.Add("0.0.0.0/0") 
+$ip1.IpRanges.Add("0.0.0.0/0") 
+Grant-EC2SecurityGroupIngress -GroupId $JumpBoxSGID -IpPermissions @( $ip1 )
+New-EC2Tag -Resource $JumpBoxSGID  -Tag @{Key="Name"; Value="Jumpbox Firewall"}
 
-Grant-EC2SecurityGroupIngress -GroupId $WebserverSGID -IpPermissions @( $ip1, $ip2,$ip3 )
-New-EC2Tag -Resource $WebserverSGID -Tag @{Key="Name"; Value="Webserver Firewall"}
 
+Write-Output "Creating private subnet Security Group"
 $PrivateSubnetSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Private_Security_Group" -GroupDescription "Private Subnet Firewall" 
 
 $ip1 = new-object Amazon.EC2.Model.IpPermission 
@@ -98,15 +117,26 @@ Grant-EC2SecurityGroupIngress -GroupId $PrivateSubnetSGID -IpPermissions @( $ip1
 New-EC2Tag -Resource $PrivateSubnetSGID  -Tag @{Key="Name"; Value="Private Subnet Firewall"}
 
 
- # Configure Instance UserData
+# Creaste a Key Pair
+Write-Output "Generating key pair"
+$KeyPair = New-EC2KeyPair -KeyName "BAH Team 1 Keypair"
+$KeyPair.KeyMaterial | Out-File -Encoding ascii "BAH Team 1 Keypair.pem" 
 
- $script = Get-Content -raw C:\_scripts\BAH_Tech_Excellence\Userdata.sh
- $WebServerUserData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Script))
+
+# Configure Instance UserData
+Write-Output "Setting up userdata objectsp"
+$script = Get-Content -raw C:\_scripts\BAH_Tech_Excellence\Userdata.sh
+$WebServerUserData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Script))
+
+$script = Get-Content -raw C:\_scripts\BAH_Tech_Excellence\UserDateJenkins.sh
+$JenkinsUserData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($Script))
 
 
+Write-Output "Creating the actual instances"
+Write-Output "Creating the web server instance"
 # Create the AWS web server Instances 
 $LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
-$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SecurityGroupId $WebserverSGID  -UserData $WebServerUserData -SubnetId $PublicSubnetID).ReservationId
+$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SecurityGroupId $WebserverSGID  -UserData $WebServerUserData -SubnetId $PublicSubnetID  -KeyName $($KeyPair.KeyName)).ReservationId
 $instance = aws ec2 describe-instances --filters Name=reservation-id,Values="$instance" | Select-String instanceid
 $instance = $($instance -split ":")[1]
 $instance = $instance.Replace("`"","")
@@ -116,8 +146,9 @@ $WebserverInstanceID=$instance
 New-EC2Tag -Resource $WebserverInstanceID -Tag @{Key="Name"; Value="Webserver"}
 
 # Create the AWS Jumpbox Instance 
+Write-Output "Creating the jumpbox server instance"
 $LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
-$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PrivateSubnetID).ReservationId
+$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PublicSubnetID -SecurityGroupId $JumpBoxSGID -KeyName $($KeyPair.KeyName)).ReservationId  
 $instance = aws ec2 describe-instances --filters Name=reservation-id,Values="$instance" | Select-String instanceid
 $instance = $($instance -split ":")[1]
 $instance = $instance.Replace("`"","")
@@ -127,8 +158,9 @@ $JuimpBoxInstanceID=$instance
 New-EC2Tag -Resource $JuimpBoxInstanceID -Tag @{Key="Name"; Value="Jumpbox"}
 
 # Create the AWS Jenkins Instance 
+Write-Output "Creating the Jenkins instance"
 $LinuxAMI = Get-SSMLatestEC2Image -Path ami-amazon-linux-latest -ImageName amzn2-ami-hvm-x86_64-gp2
-$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -SubnetId $PrivateSubnetID).ReservationId
+$instance = $(New-EC2Instance -ImageId $LinuxAMI -InstanceType t2.micro -UserData $JenkinsUserData  -SubnetId $PrivateSubnetID -SecurityGroupId $PrivateSubnetSGID  -KeyName $($KeyPair.KeyName)   ).ReservationId
 $instance = aws ec2 describe-instances --filters Name=reservation-id,Values="$instance" | Select-String instanceid
 $instance = $($instance -split ":")[1]
 $instance = $instance.Replace("`"","")
@@ -137,8 +169,8 @@ $instance = $instance.trim()
 $JenkinsInstanceID=$instance
 New-EC2Tag -Resource $JenkinsInstanceID -Tag @{Key="Name"; Value="Jenkins"}
 
-
 # Create Elastic IP and connect to the Web server Instance
+Write-Output "Creating the Elastic IP and registering it to the webserver"
 $TagSpecification = [Amazon.EC2.Model.TagSpecification]::new()
 $TagSpecification.ResourceType = 'elastic-ip'
 $tag = [Amazon.EC2.Model.Tag]@{
@@ -149,10 +181,13 @@ $tag = [Amazon.EC2.Model.Tag]@{
 
 $ElasticIP = New-EC2Address -TagSpecification $TagSpecification
 
+# Wait for Webserver Instance to be running 
+Write-output " Waiting for Webserver instance to start to associate elastic IP"
+do {$status = Get-EC2InstanceStatus -InstanceId  $WebserverInstanceID} Until ($status.InstanceState.name.Value -eq "running")
+
 Register-EC2Address -InstanceId $WebserverInstanceID -AllocationId $ElasticIP.AllocationId
 
 
-# Creaste a new Key Pair
 # Create Billing alerts
 # Create AutoScaling policy
 # Create Elastic Loadbalancer
