@@ -4,7 +4,7 @@ Install-AWSToolsModule EC2 -confirm:$False
 Install-AWSToolsModule SimpleSystemsManagement -confirm:$False
 
 
-$SelectASourceAddresses = "68.131.78.164/24"
+$SelectSourceAddresses = "68.131.78.164/24"
 
 #Create a VPC
 
@@ -31,8 +31,8 @@ New-EC2Tag -Resource $PublicSubnetID -Tag @{Key="Name"; Value="Public Subnet"}
 
 # Create Internet Gateway 
 Write-Output "Creating Internet Gateway"
-$INternetGateway = $(New-EC2InternetGateway).InternetGatewayId
-New-EC2Tag -Resource $INternetGateway -Tag @{Key="Name"; Value="BAH_Team1"}
+$InternetGatewayID = $(New-EC2InternetGateway).InternetGatewayId
+New-EC2Tag -Resource $InternetGatewayID -Tag @{Key="Name"; Value="BAH_Team1_Internet_Gateway"}
 
 
     <#
@@ -41,18 +41,17 @@ New-EC2Tag -Resource $INternetGateway -Tag @{Key="Name"; Value="BAH_Team1"}
 
 # Attach the internet gateway to your VPC.
 Write-Output "Attaching Internet Gateway to Public Subnet"
-Add-EC2InternetGateway -VpcId $VPCID -InternetGatewayId $INternetGateway
+Add-EC2InternetGateway -VpcId $VPCID -InternetGatewayId $InternetGatewayID
 
     <#
     aws ec2 attach-internet-gateway --vpc-id vpc-2f09a348 --internet-gateway-id igw-1ff7a07b
     #>
 
-
     
 # Create a custom route table for your public subnet.
 Write-Output "Creating Public Route Table"
 $PublicRouteTable = $(New-EC2RouteTable -VpcId $VPCID).RouteTableId 
-New-EC2Tag -Resource $PublicRouteTable -Tag @{Key="Name"; Value="BAH_Public_Routes"}
+New-EC2Tag -Resource $PublicRouteTable -Tag @{Key="Name"; Value="BAH_Public_Route"}
 
     <#
     aws ec2 create-route-table --vpc-id vpc-2f09a348
@@ -60,7 +59,8 @@ New-EC2Tag -Resource $PublicRouteTable -Tag @{Key="Name"; Value="BAH_Public_Rout
 
         # Create a route in the route table that points all traffic (0.0.0.0/0) to the Internet gateway.
         Write-Output "Creating routes in public route table"
-        New-EC2Route -RouteTableId $PublicRouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayId $INternetGateway
+        New-EC2Route -RouteTableId $PublicRouteTable -DestinationCidrBlock 0.0.0.0/0 -GatewayId $InternetGatewayID
+    
 
             <#
             aws ec2 create-route --route-table-id rtb-c1c8faa6 --destination-cidr-block 0.0.0.0/0 --gateway-id igw-1ff7a07b
@@ -71,30 +71,19 @@ New-EC2Tag -Resource $PublicRouteTable -Tag @{Key="Name"; Value="BAH_Public_Rout
         Register-EC2RouteTable -RouteTableId $PublicRouteTable -SubnetId $PublicSubnetID 
 
 
-# Create a custom route table for the private subnet.
-Write-Output "Creating Private Subnet Route Table"
-$PrivateRouteTable = $(New-EC2RouteTable -VpcId $VPCID).RouteTableId 
-New-EC2Tag -Resource $PrivateRouteTable -Tag @{Key="Name"; Value="BAH_Private_Routes"}
-
-        # Associate route table to subnet
-        Write-Output "Associating the route to the private subnet"
-        Register-EC2RouteTable -RouteTableId $PrivateRouteTable -SubnetId $PrivateSubnetID
-
-
-
 # Create and configure Security Groups 
 Write-Output "Creating Security Groups"
 
         # Creating Webserver Security Group
         Write-Output "Creating Webserver Security Group"
-        $WebserverSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Public_Security_Group" -GroupDescription "Webserver Firewall" 
+        $WebserverSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Webserver_Security_Group" -GroupDescription "Webserver Firewall" 
 
                 # Allow incoming http from the net 
                 $ip1 = new-object Amazon.EC2.Model.IpPermission 
                 $ip1.IpProtocol = "tcp" 
                 $ip1.FromPort = 80
                 $ip1.ToPort = 80 
-                $ip1.IpRanges.Add("10.0.0.0/24") 
+                $ip1.IpRanges.Add("0.0.0.0/0") 
 
                 # Allow incoming https from the net 
                 $ip2 = new-object Amazon.EC2.Model.IpPermission 
@@ -108,7 +97,7 @@ Write-Output "Creating Security Groups"
                 $ip3.IpProtocol = "tcp" 
                 $ip3.FromPort = 22
                 $ip3.ToPort = 22
-                $ip3.IpRanges.Add("$SelectASourceAddresses")
+                $ip3.IpRanges.Add("$SelectSourceAddresses")
 
 
         Grant-EC2SecurityGroupIngress -GroupId $WebserverSGID -IpPermissions @( $ip1, $ip2, $ip3 )
@@ -116,32 +105,25 @@ Write-Output "Creating Security Groups"
 
         
         # Creating Jenkins Security Group
-        Write-Output "Creating private subnet Security Group"
-        $JenkinsSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Jankins_Security_Group" -GroupDescription "Jenkins Firewall" 
+        Write-Output "Creating Jenkins Security Group"
+        $JenkinsSGID = New-EC2SecurityGroup -VpcId "$VPCID" -GroupName "BAH_Jenkins_Security_Group" -GroupDescription "Jenkins Firewall" 
 
                # Allow incoming http from the net 
                $ip1 = new-object Amazon.EC2.Model.IpPermission 
                $ip1.IpProtocol = "tcp" 
-               $ip1.FromPort = 80
-               $ip1.ToPort = 80 
-               $ip1.IpRanges.Add("$SelectASourceAddresses") 
+               $ip1.FromPort = 8080
+               $ip1.ToPort = 8080
+               $ip1.IpRanges.Add("$SelectSourceAddresses") 
 
                # Allow incoming https from the net 
                $ip2 = new-object Amazon.EC2.Model.IpPermission 
                $ip2.IpProtocol = "tcp" 
-               $ip2.FromPort = 443
-               $ip2.ToPort = 443
-               $ip2.IpRanges.Add("$SelectASourceAddresses")
+               $ip2.FromPort = 22
+               $ip2.ToPort = 22
+               $ip2.IpRanges.Add("$SelectSourceAddresses")
 
-               # Allow incoming SSH from the public subnet only 
-               $ip3 = new-object Amazon.EC2.Model.IpPermission 
-               $ip3.IpProtocol = "tcp" 
-               $ip3.FromPort = 22
-               $ip3.ToPort = 22
-               $ip3.IpRanges.Add("$SelectASourceAddresses")
-
-        Grant-EC2SecurityGroupIngress -GroupId $JenkinsSGID -IpPermissions @( $ip1, $ip2, $ip3 )
-        New-EC2Tag -Resource $JenkinsSGID  -Tag @{Key="Name"; Value="Private Subnet Firewall"}
+        Grant-EC2SecurityGroupIngress -GroupId $JenkinsSGID -IpPermissions @( $ip1, $ip2 )
+        New-EC2Tag -Resource $JenkinsSGID  -Tag @{Key="Name"; Value="Jenkins Firewall"}
 
 # Creaste a Key Pair
 Write-Output "Generating key pair"
@@ -170,12 +152,12 @@ $JenkinsUserData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCI
         $WebServerElasticIP = New-EC2Address -TagSpecification $TagSpecification
 
         # Create Elastic IP for Jenkins 
-        Write-Output "Creating Linux Jumpbox Elastic IP"
+        Write-Output "Creating Jenkins Server Elastic IP"
         $TagSpecification = [Amazon.EC2.Model.TagSpecification]::new()
         $TagSpecification.ResourceType = 'elastic-ip'
         $tag = [Amazon.EC2.Model.Tag]@{
             Key   = "Name"
-            Value = "BAH_Team1_Linuc_Jumpbox_Address"
+            Value = "BAH_Team1_Jenkins_Public_Address"
             }
         $TagSpecification.Tags.Add($tag)
         $JenkinsElasticIP = New-EC2Address -TagSpecification $TagSpecification
@@ -208,7 +190,6 @@ $JenkinsUserData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCI
         $JenkinsInstanceID=$instance
         New-EC2Tag -Resource $JenkinsInstanceID -Tag @{Key="Name"; Value="Jenkins"}
 
-
 # Wait for Webserver Instance to be running before registering the Elastic IP address
 Write-output "Waiting for Webserver instance to start to associate elastic IP"
 do {$status = Get-EC2InstanceStatus -InstanceId  $WebserverInstanceID} Until ($status.InstanceState.name.Value -eq "running")
@@ -221,8 +202,6 @@ Write-output " Waiting for Jenkins Server to start to associate it's Elastic IP"
 do {$status = Get-EC2InstanceStatus -InstanceId  $JenkinsInstanceID} Until ($status.InstanceState.name.Value -eq "running")
  # Register the Elastic IP to the Jupbox server Instance
 Register-EC2Address -InstanceId $JenkinsInstanceID -AllocationId $JenkinsElasticIP.AllocationId
-
-
 
 # Create Billing alerts
 # Create AutoScaling policy
